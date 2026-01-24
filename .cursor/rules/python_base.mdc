@@ -1,0 +1,45 @@
+---
+alwaysApply: true
+---
+
+# Python基本ルール（患者参加型・薬の安全チェックアプリ）
+
+## PEP 8準拠
+- インデント: スペース4つ
+- 1行の最大文字数: 120文字
+- 空行の使い方: 関数間は2行、メソッド間は1行
+- トレーリングコンマの使用
+
+## 型ヒント
+- 関数の引数と戻り値に型ヒントを使用
+- 例: `def get_user(user_id: int) -> User:`
+- Optionalの使用: `from typing import Optional`
+
+## エラーハンドリング
+- 具体的な例外をキャッチ
+- 汎用的なExceptionは避ける
+- エラーメッセージは明確に
+
+## docstring
+- 全ての関数とクラスにdocstringを記述
+- Google形式を推奨
+- 引数、戻り値、例外を記述
+
+## ベストプラクティス
+- リスト内包表記の活用
+- withステートメントの使用（ファイル、DB接続）
+- f-stringの使用（文字列フォーマット）
+- Noneとの比較は `is None` / `is not None`
+
+## FastAPI特有のルール
+- ルーターは `APIRouter` で分割
+- `app.include_router()` でエンドポイントを登録
+- `Depends` による依存性注入を活用
+- 設定は環境変数 + Pydantic Settings で管理
+- エラーレスポンスは `HTTPException` を使用
+
+## セキュリティ
+- パスワードのハッシュ化必須（認証導入時）
+- SQLインジェクション対策（ORM使用）
+- XSS対策（フロントでのエスケープとAPIレスポンス検証）
+- CSRF対策（Cookie利用時はSameSite/CSRFトークンを検討）

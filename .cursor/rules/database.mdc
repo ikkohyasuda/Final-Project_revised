@@ -1,0 +1,749 @@
+---
+alwaysApply: false
+---
+
+# データベース設計ルール
+
+**プロジェクト**: 患者参加型・薬の安全チェックアプリ  
+**ORM**: PeeWee  
+**DBMS**: SQLite（開発環境）  
+**作成日**: 2026-01-24  
+**バージョン**: 1.0
+
+---
+
+## 📊 ER図
+
+```mermaid
+erDiagram
+    %% マスタデータ層
+    Medicines {
+        int medicine_id PK
+        varchar medicine_name
+        varchar generic_name
+        varchar drug_category
+        text caution_reason
+        varchar reference_source
+        datetime created_at
+        datetime updated_at
+    }
+
+    SideEffects {
+        int side_effect_id PK
+        varchar symptom_name
+        text symptom_description
+        datetime created_at
+        datetime updated_at
+    }
+
+    Medicine_SideEffect {
+        int relation_id PK
+        int medicine_id FK
+        int side_effect_id FK
+        varchar frequency_note
+        datetime created_at
+    }
+
+    %% トランザクションデータ層
+    UploadedImages {
+        int image_id PK
+        varchar file_path
+        varchar file_format
+        int file_size
+        datetime uploaded_at
+    }
+
+    ExtractedMedicines {
+        int extracted_id PK
+        int image_id FK
+        varchar extracted_text
+        boolean is_manually_edited
+        datetime extracted_at
+        datetime edited_at
+    }
+
+    MatchedMedicines {
+        int match_id PK
+        int extracted_id FK
+        int medicine_id FK
+        boolean is_matched
+        datetime matched_at
+    }
+
+    CheckedSymptoms {
+        int check_id PK
+        int match_id FK
+        int side_effect_id FK
+        datetime checked_at
+    }
+
+    SummarySheets {
+        int sheet_id PK
+        int image_id FK
+        datetime generated_at
+        datetime pdf_exported_at
+        datetime printed_at
+    }
+
+    %% リレーションシップ
+    Medicines ||--o{ Medicine_SideEffect : "has"
+    SideEffects ||--o{ Medicine_SideEffect : "has"
+    UploadedImages ||--o{ ExtractedMedicines : "contains"
+    ExtractedMedicines ||--o{ MatchedMedicines : "matches"
+    Medicines ||--o{ MatchedMedicines : "references"
+    MatchedMedicines ||--o{ CheckedSymptoms : "has"
+    SideEffects ||--o{ CheckedSymptoms : "references"
+    UploadedImages ||--|| SummarySheets : "generates"
+```
+
+---
+
+## 📋 テーブル一覧
+
+| # | テーブル名 | 分類 | 説明 | PeeWeeモデル |
+|---|-----------|------|------|-------------|
+| 1 | Medicines | マスタ | 薬剤マスタ | Medicine |
+| 2 | SideEffects | マスタ | 副作用症状マスタ | SideEffect |
+| 3 | Medicine_SideEffect | マスタ | 薬剤-副作用関連 | MedicineSideEffect |
+| 4 | UploadedImages | トランザクション | アップロード画像 | UploadedImage |
+| 5 | ExtractedMedicines | トランザクション | 抽出薬剤 | ExtractedMedicine |
+| 6 | MatchedMedicines | トランザクション | 該当薬剤照合結果 | MatchedMedicine |
+| 7 | CheckedSymptoms | トランザクション | チェック症状 | CheckedSymptom |
+| 8 | SummarySheets | トランザクション | 症状まとめシート | SummarySheet |
+
+---
+
+## 🔧 データベース接続設定
+
+```python
+# database.py
+from peewee import *
+from datetime import datetime
+
+# SQLite データベース接続
+db = SqliteDatabase('medication_checker.db')
+
+class BaseModel(Model):
+    """ベースモデル：全モデルの共通設定"""
+    class Meta:
+        database = db
+
+def initialize_database():
+    """データベース初期化"""
+    db.connect()
+    db.create_tables([
+        Medicine,
+        SideEffect,
+        MedicineSideEffect,
+        UploadedImage,
+        ExtractedMedicine,
+        MatchedMedicine,
+        CheckedSymptom,
+        SummarySheet
+    ])
+    
+def close_database():
+    """データベース接続を閉じる"""
+    if not db.is_closed():
+        db.close()
+```
+
+---
+
+## 📚 マスタデータ層
+
+### 1. Medicines（薬剤マスタ）
+
+**概要**: 高齢者に特に注意が必要な薬剤の情報を管理
+
+#### テーブル定義
+
+| カラム名 | 型 | NULL | デフォルト | 制約 | 説明 |
+|---------|---|:----:|----------|------|------|
+| medicine_id | INTEGER | NOT NULL | 自動採番 | PK | 薬剤マスタの一意識別子 |
+| medicine_name | VARCHAR(200) | NOT NULL | - | - | 商品名（例：ロキソニン錠60mg） |
+| generic_name | VARCHAR(200) | NOT NULL | - | - | 一般名・成分名 |
+| drug_category | VARCHAR(100) | NOT NULL | - | - | 薬効分類 |
+| caution_reason | TEXT | NULL | NULL | - | 注意理由 |
+| reference_source | VARCHAR(200) | NULL | NULL | - | 参照元ガイドライン名 |
+| created_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | 作成日時 |
+| updated_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | 更新日時 |
+
+#### PeeWeeモデル実装
+
+```python
+from peewee import *
+from datetime import datetime
+
+class Medicine(BaseModel):
+    """薬剤マスタモデル"""
+    medicine_id = AutoField(primary_key=True)
+    medicine_name = CharField(max_length=200, null=False, index=True)
+    generic_name = CharField(max_length=200, null=False, index=True)
+    drug_category = CharField(max_length=100, null=False, index=True)
+    caution_reason = TextField(null=True)
+    reference_source = CharField(max_length=200, null=True)
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'medicines'
+        indexes = (
+            (('medicine_name',), False),
+            (('generic_name',), False),
+            (('drug_category',), False),
+        )
+    
+    def save(self, *args, **kwargs):
+        """保存時にupdated_atを自動更新"""
+        self.updated_at = datetime.now()
+        return super(Medicine, self).save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"{self.medicine_name} ({self.generic_name})"
+```
+
+---
+
+### 2. SideEffects（副作用症状マスタ）
+
+**概要**: 高齢者で注意すべき副作用症状の情報を管理
+
+#### テーブル定義
+
+| カラム名 | 型 | NULL | デフォルト | 制約 | 説明 |
+|---------|---|:----:|----------|------|------|
+| side_effect_id | INTEGER | NOT NULL | 自動採番 | PK | 副作用症状の一意識別子 |
+| symptom_name | VARCHAR(100) | NOT NULL | - | UNIQUE | 副作用症状名 |
+| symptom_description | TEXT | NULL | NULL | - | 症状の説明 |
+| created_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | 作成日時 |
+| updated_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | 更新日時 |
+
+#### PeeWeeモデル実装
+
+```python
+class SideEffect(BaseModel):
+    """副作用症状マスタモデル"""
+    side_effect_id = AutoField(primary_key=True)
+    symptom_name = CharField(max_length=100, unique=True, null=False, index=True)
+    symptom_description = TextField(null=True)
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'side_effects'
+    
+    def save(self, *args, **kwargs):
+        """保存時にupdated_atを自動更新"""
+        self.updated_at = datetime.now()
+        return super(SideEffect, self).save(*args, **kwargs)
+    
+    def __str__(self):
+        return self.symptom_name
+```
+
+---
+
+### 3. Medicine_SideEffect（薬剤-副作用関連マスタ）
+
+**概要**: 薬剤と副作用症状の多対多関係を管理する中間テーブル
+
+#### テーブル定義
+
+| カラム名 | 型 | NULL | デフォルト | 制約 | 説明 |
+|---------|---|:----:|----------|------|------|
+| relation_id | INTEGER | NOT NULL | 自動採番 | PK | 関連の一意識別子 |
+| medicine_id | INTEGER | NOT NULL | - | FK | 薬剤マスタへの外部キー |
+| side_effect_id | INTEGER | NOT NULL | - | FK | 副作用症状マスタへの外部キー |
+| frequency_note | VARCHAR(50) | NULL | NULL | - | 頻度メモ |
+| created_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | 作成日時 |
+
+**複合UNIQUE制約**: `UNIQUE(medicine_id, side_effect_id)`
+
+#### PeeWeeモデル実装
+
+```python
+class MedicineSideEffect(BaseModel):
+    """薬剤-副作用関連モデル（中間テーブル）"""
+    relation_id = AutoField(primary_key=True)
+    medicine = ForeignKeyField(Medicine, backref='side_effect_relations', on_delete='CASCADE')
+    side_effect = ForeignKeyField(SideEffect, backref='medicine_relations', on_delete='CASCADE')
+    frequency_note = CharField(max_length=50, null=True)
+    created_at = DateTimeField(default=datetime.now)
+    
+    class Meta:
+        table_name = 'medicine_side_effect'
+        indexes = (
+            (('medicine', 'side_effect'), True),  # 複合ユニークインデックス
+        )
+    
+    def __str__(self):
+        return f"{self.medicine.medicine_name} - {self.side_effect.symptom_name}"
+```
+
+---
+
+## 🔄 トランザクションデータ層
+
+### 4. UploadedImages（アップロード画像）
+
+**概要**: ユーザーがアップロードした処方箋画像を管理
+
+#### テーブル定義
+
+| カラム名 | 型 | NULL | デフォルト | 制約 | 説明 |
+|---------|---|:----:|----------|------|------|
+| image_id | INTEGER | NOT NULL | 自動採番 | PK | 画像の一意識別子 |
+| file_path | VARCHAR(500) | NOT NULL | - | UNIQUE | ファイルパス |
+| file_format | VARCHAR(10) | NOT NULL | - | CHECK | ファイル形式（JPEG/PNG/JPG） |
+| file_size | INTEGER | NOT NULL | - | CHECK | ファイルサイズ（最大10MB） |
+| uploaded_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | アップロード日時 |
+
+#### PeeWeeモデル実装
+
+```python
+class UploadedImage(BaseModel):
+    """アップロード画像モデル"""
+    image_id = AutoField(primary_key=True)
+    file_path = CharField(max_length=500, unique=True, null=False)
+    file_format = CharField(max_length=10, null=False)
+    file_size = IntegerField(null=False)
+    uploaded_at = DateTimeField(default=datetime.now, index=True)
+    
+    class Meta:
+        table_name = 'uploaded_images'
+        indexes = (
+            (('uploaded_at',), False),
+        )
+    
+    def save(self, *args, **kwargs):
+        """保存時のバリデーション"""
+        # ファイル形式チェック
+        if self.file_format not in ['JPEG', 'PNG', 'JPG']:
+            raise ValueError("ファイル形式はJPEG、PNG、JPGのいずれかである必要があります")
+        
+        # ファイルサイズチェック（10MB = 10,485,760バイト）
+        if self.file_size <= 0 or self.file_size > 10485760:
+            raise ValueError("ファイルサイズは1バイト〜10MBの範囲である必要があります")
+        
+        return super(UploadedImage, self).save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"Image {self.image_id}: {self.file_path}"
+```
+
+---
+
+### 5. ExtractedMedicines（抽出薬剤）
+
+**概要**: 画像からOCRで抽出された薬剤名を管理
+
+#### テーブル定義
+
+| カラム名 | 型 | NULL | デフォルト | 制約 | 説明 |
+|---------|---|:----:|----------|------|------|
+| extracted_id | INTEGER | NOT NULL | 自動採番 | PK | 抽出結果の一意識別子 |
+| image_id | INTEGER | NOT NULL | - | FK | 画像への外部キー |
+| extracted_text | VARCHAR(200) | NOT NULL | - | - | 抽出された薬剤名 |
+| is_manually_edited | BOOLEAN | NOT NULL | 0 | - | 手動修正フラグ |
+| extracted_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | 抽出日時 |
+| edited_at | DATETIME | NULL | NULL | - | 手動修正日時 |
+
+#### PeeWeeモデル実装
+
+```python
+class ExtractedMedicine(BaseModel):
+    """抽出薬剤モデル"""
+    extracted_id = AutoField(primary_key=True)
+    image = ForeignKeyField(UploadedImage, backref='extracted_medicines', on_delete='CASCADE')
+    extracted_text = CharField(max_length=200, null=False, index=True)
+    is_manually_edited = BooleanField(default=False, index=True)
+    extracted_at = DateTimeField(default=datetime.now, index=True)
+    edited_at = DateTimeField(null=True)
+    
+    class Meta:
+        table_name = 'extracted_medicines'
+    
+    def mark_as_edited(self):
+        """手動修正済みとしてマーク"""
+        self.is_manually_edited = True
+        self.edited_at = datetime.now()
+        self.save()
+    
+    def __str__(self):
+        edited_mark = " (編集済)" if self.is_manually_edited else ""
+        return f"{self.extracted_text}{edited_mark}"
+```
+
+---
+
+### 6. MatchedMedicines（該当薬剤照合結果）
+
+**概要**: 抽出された薬剤名と薬剤マスタの照合結果を管理
+
+#### テーブル定義
+
+| カラム名 | 型 | NULL | デフォルト | 制約 | 説明 |
+|---------|---|:----:|----------|------|------|
+| match_id | INTEGER | NOT NULL | 自動採番 | PK | 照合結果の一意識別子 |
+| extracted_id | INTEGER | NOT NULL | - | FK | 抽出薬剤への外部キー |
+| medicine_id | INTEGER | NULL | NULL | FK | 薬剤マスタへの外部キー |
+| is_matched | BOOLEAN | NOT NULL | 0 | - | 該当フラグ |
+| matched_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | 照合日時 |
+
+**CHECK制約**: `(is_matched = 1 AND medicine_id IS NOT NULL) OR (is_matched = 0 AND medicine_id IS NULL)`
+
+#### PeeWeeモデル実装
+
+```python
+class MatchedMedicine(BaseModel):
+    """該当薬剤照合結果モデル"""
+    match_id = AutoField(primary_key=True)
+    extracted_medicine = ForeignKeyField(ExtractedMedicine, backref='matches', on_delete='CASCADE')
+    medicine = ForeignKeyField(Medicine, backref='matches', null=True, on_delete='RESTRICT')
+    is_matched = BooleanField(default=False, index=True)
+    matched_at = DateTimeField(default=datetime.now, index=True)
+    
+    class Meta:
+        table_name = 'matched_medicines'
+        indexes = (
+            (('extracted_medicine', 'is_matched'), False),  # 複合インデックス
+        )
+    
+    def save(self, *args, **kwargs):
+        """保存時のバリデーション"""
+        # is_matchedとmedicine_idの整合性チェック
+        if self.is_matched and self.medicine is None:
+            raise ValueError("該当フラグがTrueの場合、薬剤IDは必須です")
+        if not self.is_matched and self.medicine is not None:
+            raise ValueError("該当フラグがFalseの場合、薬剤IDはNULLである必要があります")
+        
+        return super(MatchedMedicine, self).save(*args, **kwargs)
+    
+    def __str__(self):
+        if self.is_matched:
+            return f"該当: {self.medicine.medicine_name}"
+        return "非該当"
+```
+
+---
+
+### 7. CheckedSymptoms（チェック症状）
+
+**概要**: ユーザーがチェックした症状を記録
+
+#### テーブル定義
+
+| カラム名 | 型 | NULL | デフォルト | 制約 | 説明 |
+|---------|---|:----:|----------|------|------|
+| check_id | INTEGER | NOT NULL | 自動採番 | PK | チェック記録の一意識別子 |
+| match_id | INTEGER | NOT NULL | - | FK | 照合結果への外部キー |
+| side_effect_id | INTEGER | NOT NULL | - | FK | 副作用症状への外部キー |
+| checked_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | チェック日時 |
+
+**複合UNIQUE制約**: `UNIQUE(match_id, side_effect_id)`
+
+#### PeeWeeモデル実装
+
+```python
+class CheckedSymptom(BaseModel):
+    """チェック症状モデル"""
+    check_id = AutoField(primary_key=True)
+    matched_medicine = ForeignKeyField(MatchedMedicine, backref='checked_symptoms', on_delete='CASCADE')
+    side_effect = ForeignKeyField(SideEffect, backref='checked_symptoms', on_delete='RESTRICT')
+    checked_at = DateTimeField(default=datetime.now, index=True)
+    
+    class Meta:
+        table_name = 'checked_symptoms'
+        indexes = (
+            (('matched_medicine', 'side_effect'), True),  # 複合ユニークインデックス
+        )
+    
+    def save(self, *args, **kwargs):
+        """保存時のバリデーション"""
+        # 該当薬剤のみチェック可能
+        if not self.matched_medicine.is_matched:
+            raise ValueError("該当していない薬剤には症状をチェックできません")
+        
+        return super(CheckedSymptom, self).save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"{self.side_effect.symptom_name} (チェック済)"
+```
+
+---
+
+### 8. SummarySheets（症状まとめシート）
+
+**概要**: ユーザーが作成した症状まとめシートを管理
+
+#### テーブル定義
+
+| カラム名 | 型 | NULL | デフォルト | 制約 | 説明 |
+|---------|---|:----:|----------|------|------|
+| sheet_id | INTEGER | NOT NULL | 自動採番 | PK | シートの一意識別子 |
+| image_id | INTEGER | NOT NULL | - | FK, UNIQUE | 画像への外部キー（1対1） |
+| generated_at | DATETIME | NOT NULL | CURRENT_TIMESTAMP | - | 生成日時 |
+| pdf_exported_at | DATETIME | NULL | NULL | - | PDF出力日時 |
+| printed_at | DATETIME | NULL | NULL | - | 印刷日時 |
+
+**UNIQUE制約**: `UNIQUE(image_id)` でMVP版では1画像につき1シート
+
+#### PeeWeeモデル実装
+
+```python
+class SummarySheet(BaseModel):
+    """症状まとめシートモデル"""
+    sheet_id = AutoField(primary_key=True)
+    image = ForeignKeyField(UploadedImage, unique=True, backref='summary_sheet', on_delete='CASCADE')
+    generated_at = DateTimeField(default=datetime.now, index=True)
+    pdf_exported_at = DateTimeField(null=True, index=True)
+    printed_at = DateTimeField(null=True, index=True)
+    
+    class Meta:
+        table_name = 'summary_sheets'
+    
+    def export_to_pdf(self):
+        """PDF出力済みとしてマーク"""
+        self.pdf_exported_at = datetime.now()
+        self.save()
+    
+    def mark_as_printed(self):
+        """印刷済みとしてマーク"""
+        if self.pdf_exported_at is None:
+            raise ValueError("PDF出力前に印刷することはできません")
+        self.printed_at = datetime.now()
+        self.save()
+    
+    @property
+    def is_pdf_exported(self):
+        """PDF出力済みかどうか"""
+        return self.pdf_exported_at is not None
+    
+    @property
+    def is_printed(self):
+        """印刷済みかどうか"""
+        return self.printed_at is not None
+    
+    def __str__(self):
+        status = []
+        if self.is_pdf_exported:
+            status.append("PDF出力済")
+        if self.is_printed:
+            status.append("印刷済")
+        status_str = ", ".join(status) if status else "未出力"
+        return f"シート {self.sheet_id} ({status_str})"
+```
+
+---
+
+## 📊 リレーションシップ詳細
+
+| ID | 親テーブル | 子テーブル | 関係 | 外部キー | 削除制約 | NULL許容 |
+|:--:|----------|----------|:---:|---------|---------|:-------:|
+| R1 | Medicines | Medicine_SideEffect | 1:N | medicine_id | CASCADE | ❌ |
+| R2 | SideEffects | Medicine_SideEffect | 1:N | side_effect_id | CASCADE | ❌ |
+| R3 | UploadedImages | ExtractedMedicines | 1:N | image_id | CASCADE | ❌ |
+| R4 | ExtractedMedicines | MatchedMedicines | 1:N | extracted_id | CASCADE | ❌ |
+| R5 | Medicines | MatchedMedicines | 1:N | medicine_id | RESTRICT | ✅ |
+| R6 | MatchedMedicines | CheckedSymptoms | 1:N | match_id | CASCADE | ❌ |
+| R7 | SideEffects | CheckedSymptoms | 1:N | side_effect_id | RESTRICT | ❌ |
+| R8 | UploadedImages | SummarySheets | 1:1 | image_id | CASCADE | ❌ |
+
+---
+
+## 🎯 インデックス戦略
+
+### 超重要（必須実装）
+
+```python
+# 外部キー（JOIN性能向上）
+# - Medicine_SideEffect.medicine_id
+# - ExtractedMedicines.image_id
+# - MatchedMedicines.extracted_id
+# - CheckedSymptoms.match_id
+
+# 最頻出検索
+# - Medicines.medicine_name
+# - UploadedImages.uploaded_at
+# - MatchedMedicines(extracted_id, is_matched) 複合インデックス
+```
+
+### 重要（推奨実装）
+
+```python
+# 検索・フィルタ用
+# - Medicines.generic_name
+# - MatchedMedicines.medicine_id
+# - CheckedSymptoms.side_effect_id
+# - SummarySheets.generated_at
+```
+
+---
+
+## ✅ バリデーションルール
+
+### セキュリティバリデーション
+
+```python
+# SQLインジェクション対策
+# - パラメータ化クエリの使用（PeeWeeは自動対応）
+# - 危険な文字のサニタイズ
+
+# XSS対策
+# - HTMLタグのエスケープ
+# - ユーザー入力の検証
+
+# ファイルアップロード対策
+# - ファイルサイズ制限（10MB）
+# - ファイル形式チェック（JPEG、PNG、JPGのみ）
+# - MIME typeチェック
+# - マジックバイトチェック
+```
+
+### 時系列整合性チェック
+
+```python
+# ExtractedMedicines
+# - edited_at >= extracted_at
+
+# SummarySheets
+# - pdf_exported_at >= generated_at
+# - printed_at >= pdf_exported_at
+# - printed_at が設定されている場合、pdf_exported_at も必須
+```
+
+---
+
+## 🌱 シーダーデータ
+
+### マスタデータ（本番環境で必要）
+
+- **Medicines**: 30件（高齢者注意薬剤リスト）
+- **SideEffects**: 20件（高齢者で注意すべき副作用症状）
+- **Medicine_SideEffect**: 約90件（薬剤と副作用の関連付け）
+
+### テストデータ（開発環境のみ）
+
+- **UploadedImages**: 5件
+- **ExtractedMedicines**: 11件
+- **MatchedMedicines**: 11件
+- **CheckedSymptoms**: 12件
+- **SummarySheets**: 5件
+
+---
+
+## 📝 使用例
+
+### データベース初期化
+
+```python
+from database import initialize_database, close_database
+
+# データベースを初期化
+initialize_database()
+
+# アプリケーション終了時
+close_database()
+```
+
+### レコードの作成
+
+```python
+# 薬剤マスタの作成
+medicine = Medicine.create(
+    medicine_name="ロキソニン錠60mg",
+    generic_name="ロキソプロフェンナトリウム水和物",
+    drug_category="解熱鎮痛薬",
+    caution_reason="消化管出血、腎機能低下、心血管系イベントリスク増加",
+    reference_source="高齢者の安全な薬物療法ガイドライン2015"
+)
+
+# 副作用症状の作成
+side_effect = SideEffect.create(
+    symptom_name="めまい",
+    symptom_description="立ちくらみやバランスを崩しやすくなる症状。転倒の原因となります。"
+)
+
+# 関連付け
+relation = MedicineSideEffect.create(
+    medicine=medicine,
+    side_effect=side_effect,
+    frequency_note="時々ある（1-5%）"
+)
+```
+
+### データの取得
+
+```python
+# 薬剤名での検索（部分一致）
+medicines = Medicine.select().where(
+    Medicine.medicine_name.contains("ロキソニン")
+)
+
+# 画像の抽出結果を取得（リレーション使用）
+image = UploadedImage.get_by_id(1)
+extracted_medicines = image.extracted_medicines
+
+# 該当薬剤の副作用リストを取得
+medicine = Medicine.get_by_id(1)
+side_effects = (SideEffect
+    .select()
+    .join(MedicineSideEffect)
+    .where(MedicineSideEffect.medicine == medicine)
+)
+```
+
+### トランザクション処理
+
+```python
+from peewee import database
+
+# トランザクション開始
+with db.atomic():
+    # 画像アップロード
+    image = UploadedImage.create(
+        file_path="uploads/2026/01/prescription.jpg",
+        file_format="JPEG",
+        file_size=2458624
+    )
+    
+    # OCR抽出
+    extracted = ExtractedMedicine.create(
+        image=image,
+        extracted_text="ロキソニン錠60mg"
+    )
+    
+    # 照合
+    matched = MatchedMedicine.create(
+        extracted_medicine=extracted,
+        medicine=medicine,
+        is_matched=True
+    )
+```
+
+---
+
+## 🔒 外部キー制約の有効化
+
+```python
+# SQLiteで外部キー制約を有効化
+db = SqliteDatabase('medication_checker.db', pragmas={
+    'foreign_keys': 1,  # 外部キー制約を有効化
+    'journal_mode': 'wal',  # WALモード（並行性向上）
+})
+```
+
+---
+
+## 📚 関連ドキュメント
+
+- [database_design.md](../database_design.md) - データベース設計詳細
+- [er_diagram.md](../er_diagram.md) - ER図
+- [requirements.md](../requirements.md) - 要件定義書
+
+---
+
+**文書ステータス**: 最終版  
+**最終更新日**: 2026-01-24  
+**次回レビュー予定**: Phase 2設計時

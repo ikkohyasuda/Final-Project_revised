@@ -1,0 +1,44 @@
+---
+alwaysApply: true
+---
+
+# コーディング規約（患者参加型・薬の安全チェックアプリ）
+
+## 命名規則
+- 変数名: snake_case
+- 関数名: snake_case
+- クラス名: PascalCase
+- 定数名: UPPER_SNAKE_CASE
+- ファイル名: snake_case
+
+## ファイル構成ルール
+- backend/app/models/: モデルファイル（`medicine.py`, `side_effect.py` など）
+- backend/app/api/: ルートファイル（`upload.py`, `ocr.py`, `drugs.py`, `report.py` など）
+- backend/app/services/: サービス層（`ocr_service.py`, `matching_service.py` など）
+- backend/app/core/: 設定・共通処理（`config.py`, `security.py` など）
+- backend/app/schemas/: Pydanticスキーマ
+- backend/app/utils/: ユーティリティ
+- backend/app/db/: DB接続・初期化
+- backend/data/: CSV（注意薬剤/副作用症状）
+- frontend/app/: Next.js ルーティング
+- frontend/components/: UIコンポーネント
+- frontend/styles/: スタイル
+- frontend/public/: 静的ファイル
+
+## インポート順序
+1. 標準ライブラリ
+2. サードパーティライブラリ
+3. ローカルモジュール
+
+各セクションは空行で区切る。
+
+## コメント規則
+- 関数にはdocstringを記述
+- 複雑なロジックにはコメントを追加
+- TODOコメントの形式: `# TODO: 説明`
+
+## その他の規約
+- PEP 8に準拠
+- 1行の最大文字数: 120文字
+- インデント: スペース4つ
+- 文字列: シングルクォートを優先
