@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>症状チェック</title>
+  </head>
+  <body>
+    <h1>症状チェック</h1>
+    <section>
+      <h2>症状一覧の取得</h2>
+      <form id="symptom-fetch-form">
+        <label for="image_id">画像ID</label>
+        <input id="image_id" name="image_id" type="number" min="1" required />
+        <button type="submit">症状を表示</button>
+      </form>
+    </section>
+    <section>
+      <h2>症状チェックの保存</h2>
+      <div id="symptom-forms"></div>
+    </section>
+    <script>
+      const fetchForm = document.getElementById('symptom-fetch-form');
+      const formsContainer = document.getElementById('symptom-forms');
+
+      fetchForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        formsContainer.innerHTML = '';
+
+        const formData = new FormData(fetchForm);
+        const response = await fetch('/api/drugs/symptoms', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          formsContainer.textContent = error.detail || '症状取得に失敗しました。';
+          return;
+        }
+
+        const data = await response.json();
+        if (!data.items || data.items.length === 0) {
+          formsContainer.textContent = '該当する薬剤がありません。';
+          return;
+        }
+
+        data.items.forEach((item) => {
+          const form = document.createElement('form');
+          form.method = 'post';
+          form.action = '/api/drugs/symptoms/check';
+
+          const title = document.createElement('h3');
+          title.textContent = `薬剤: ${item.medicine_name} (照合ID: ${item.match_id})`;
+          form.appendChild(title);
+
+          const matchInput = document.createElement('input');
+          matchInput.type = 'hidden';
+          matchInput.name = 'match_id';
+          matchInput.value = item.match_id;
+          form.appendChild(matchInput);
+
+          if (item.side_effects.length === 0) {
+            const empty = document.createElement('p');
+            empty.textContent = '症状が登録されていません。';
+            form.appendChild(empty);
+          } else {
+            item.side_effects.forEach((effect) => {
+              const label = document.createElement('label');
+              label.style.display = 'block';
+              const checkbox = document.createElement('input');
+              checkbox.type = 'checkbox';
+              checkbox.value = effect.side_effect_id;
+              checkbox.name = 'symptom';
+              label.appendChild(checkbox);
+              label.append(` ${effect.symptom_name}`);
+              form.appendChild(label);
+            });
+          }
+
+          const hiddenList = document.createElement('input');
+          hiddenList.type = 'hidden';
+          hiddenList.name = 'side_effect_ids';
+          form.appendChild(hiddenList);
+
+          const submit = document.createElement('button');
+          submit.type = 'submit';
+          submit.textContent = 'チェックを保存';
+          form.appendChild(submit);
+
+          form.addEventListener('submit', (e) => {
+            const selected = Array.from(form.querySelectorAll('input[name="symptom"]:checked'))
+              .map((checkbox) => checkbox.value)
+              .join(',');
+            hiddenList.value = selected;
+            if (!hiddenList.value) {
+              e.preventDefault();
+              alert('症状を1つ以上選択してください。');
+            }
+          });
+
+          formsContainer.appendChild(form);
+        });
+      });
+    </script>
+  </body>
+</html>

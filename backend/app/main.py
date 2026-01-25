@@ -1,10 +1,14 @@
 from fastapi import FastAPI
 
-from backend.app.api import upload_router
+from backend.app.api import drugs_router, ocr_router, report_router, symptoms_router, upload_router
 
 app = FastAPI()
 
 app.include_router(upload_router)
+app.include_router(ocr_router)
+app.include_router(drugs_router)
+app.include_router(symptoms_router)
+app.include_router(report_router)
 
 
 @app.get('/')

@@ -2,12 +2,14 @@ import os
 from pathlib import Path
 from typing import Optional, Set
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 BASE_DIR = Path(os.environ.get('PROJECT_ROOT', Path(__file__).resolve().parent))
 DEFAULT_INSTANCE_DIR = BASE_DIR / 'instance'
 DEFAULT_UPLOAD_DIR = BASE_DIR / 'static' / 'uploads'
 DEFAULT_DATA_DIR = BASE_DIR / 'backend' / 'data'
+DEFAULT_RULES_CSV = BASE_DIR / 'rules.csv'
 
 
 class Settings(BaseSettings):
@@ -35,6 +37,7 @@ class Settings(BaseSettings):
     data_dir: Path = Field(DEFAULT_DATA_DIR, env='DATA_DIR')
     caution_medicines_csv: Path = Field(DEFAULT_DATA_DIR / 'caution_medicines.csv', env='CAUTION_MEDICINES_CSV')
     side_effects_csv: Path = Field(DEFAULT_DATA_DIR / 'side_effects.csv', env='SIDE_EFFECTS_CSV')
+    rules_csv: Path = Field(DEFAULT_RULES_CSV, env='RULES_CSV')
 
     class Config:
         """Pydantic設定."""

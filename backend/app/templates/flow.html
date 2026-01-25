@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>自動フロー</title>
+    <style>
+      body { font-family: sans-serif; line-height: 1.6; }
+      .section { margin-bottom: 24px; }
+      .status { padding: 8px; background: #f2f2f2; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>おくすりのチェック</h1>
+
+    <div class="section">
+      <h2>1. 画像アップロード</h2>
+      <form id="upload-form">
+        <input type="file" name="file" accept=".jpg,.jpeg,.png" required />
+        <button type="submit">画像をアップロード</button>
+      </form>
+      <div id="upload-status" class="status hidden"></div>
+    </div>
+
+    <div class="section">
+      <h2>2. 症状チェック</h2>
+      <div id="symptom-forms"></div>
+    </div>
+
+    <div class="section">
+      <h2>3. 結果</h2>
+      <div id="report-status" class="status hidden"></div>
+      <div id="report-preview"></div>
+      <button id="pdf-button" disabled>PDFを作成する</button>
+      <div id="pdf-link"></div>
+    </div>
+
+    <script>
+      const uploadForm = document.getElementById('upload-form');
+      const uploadStatus = document.getElementById('upload-status');
+      const symptomForms = document.getElementById('symptom-forms');
+      const reportStatus = document.getElementById('report-status');
+      const reportPreview = document.getElementById('report-preview');
+      const pdfButton = document.getElementById('pdf-button');
+      const pdfLink = document.getElementById('pdf-link');
+
+      let imageId = null;
+      let taskId = null;
+      let reportId = null;
+
+      const showStatus = (el, message) => {
+        el.textContent = message;
+        el.classList.remove('hidden');
+      };
+
+      uploadForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        showStatus(uploadStatus, 'アップロード中...');
+        const formData = new FormData(uploadForm);
+        const response = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) {
+          showStatus(uploadStatus, data.detail || 'アップロードに失敗しました。');
+          return;
+        }
+        imageId = data.image_id;
+        showStatus(uploadStatus, 'アップロード完了。読み取り中...');
+        await runOcr();
+      });
+
+      const runOcr = async () => {
+        if (!imageId) return;
+        const formData = new FormData();
+        formData.append('image_id', imageId);
+        const response = await fetch('/api/ocr', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) {
+          showStatus(uploadStatus, data.detail || 'OCRに失敗しました。');
+          return;
+        }
+        taskId = data.task_id;
+        const statusResponse = await fetch(`/api/ocr/status/${taskId}`);
+        const statusData = await statusResponse.json();
+        if (!statusResponse.ok || statusData.status !== 'completed') {
+          showStatus(uploadStatus, statusData.error || 'OCRが完了しませんでした。');
+          return;
+        }
+        showStatus(uploadStatus, '読み取り完了。照合中...');
+        await runCheck();
+      };
+
+      const runCheck = async () => {
+        if (!imageId) return;
+        const formData = new FormData();
+        formData.append('image_id', imageId);
+        const response = await fetch('/api/drugs/check', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) {
+          showStatus(uploadStatus, data.detail || '照合に失敗しました。');
+          return;
+        }
+        showStatus(uploadStatus, '照合完了。症状を選んでください。');
+        await renderSymptoms();
+      };
+
+      const renderSymptoms = async () => {
+        symptomForms.innerHTML = '';
+        const formData = new FormData();
+        formData.append('image_id', imageId);
+        const response = await fetch('/api/drugs/symptoms', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) {
+          const error = document.createElement('p');
+          error.textContent = data.detail || '症状取得に失敗しました。';
+          symptomForms.appendChild(error);
+          return;
+        }
+        data.items.forEach((item) => {
+          const form = document.createElement('form');
+          form.action = '/api/drugs/symptoms/check';
+          form.method = 'post';
+          form.innerHTML = `<h3>薬剤: ${item.medicine_name}</h3>`;
+
+          const matchInput = document.createElement('input');
+          matchInput.type = 'hidden';
+          matchInput.name = 'match_id';
+          matchInput.value = item.match_id;
+          form.appendChild(matchInput);
+
+          item.side_effects.forEach((effect) => {
+            const label = document.createElement('label');
+            label.style.display = 'block';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.name = 'symptom';
+            checkbox.value = effect.side_effect_id;
+            label.appendChild(checkbox);
+            label.append(` ${effect.symptom_name}`);
+            form.appendChild(label);
+          });
+
+          const hiddenList = document.createElement('input');
+          hiddenList.type = 'hidden';
+          hiddenList.name = 'side_effect_ids';
+          form.appendChild(hiddenList);
+
+          const submit = document.createElement('button');
+          submit.type = 'submit';
+          submit.textContent = '結果を見る';
+          form.appendChild(submit);
+
+          form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const selected = Array.from(form.querySelectorAll('input[name="symptom"]:checked'))
+              .map((checkbox) => checkbox.value)
+              .join(',');
+            if (!selected) {
+              alert('症状を1つ以上選択してください。');
+              return;
+            }
+            hiddenList.value = selected;
+            const formData = new FormData(form);
+            const response = await fetch('/api/drugs/symptoms/check', { method: 'POST', body: formData });
+            const data = await response.json();
+            if (!response.ok) {
+              alert(data.detail || '保存に失敗しました。');
+              return;
+            }
+            await generateReport();
+          });
+
+          symptomForms.appendChild(form);
+        });
+      };
+
+      const generateReport = async () => {
+        if (!imageId) return;
+        showStatus(reportStatus, 'まとめシート生成中...');
+        reportPreview.innerHTML = '';
+        pdfLink.innerHTML = '';
+        const formData = new FormData();
+        formData.append('image_id', imageId);
+        const response = await fetch('/api/report/generate', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) {
+          showStatus(reportStatus, data.detail || '生成に失敗しました。');
+          return;
+        }
+        reportId = data.report_id;
+        showStatus(reportStatus, `生成完了 (report_id: ${reportId})`);
+        reportPreview.appendChild(buildReportPreview(data));
+        pdfButton.disabled = false;
+      };
+
+      pdfButton.addEventListener('click', () => {
+        if (!reportId) return;
+        pdfLink.innerHTML = `<a href="/api/report/${reportId}/pdf" target="_blank">PDFを開く</a>`;
+      });
+
+      const buildReportPreview = (data) => {
+        const container = document.createElement('div');
+        const title = document.createElement('h3');
+        title.textContent = '結果プレビュー';
+        container.appendChild(title);
+
+        if (!data.matched || data.matched.length === 0) {
+          const empty = document.createElement('p');
+          empty.textContent = '該当薬剤がありません。';
+          container.appendChild(empty);
+          return container;
+        }
+
+        data.matched.forEach((item) => {
+          const med = document.createElement('p');
+          med.textContent = `薬剤: ${item.medicine_name}`;
+          container.appendChild(med);
+
+          if (!item.checked_symptoms || item.checked_symptoms.length === 0) {
+            const none = document.createElement('p');
+            none.textContent = '症状チェック: なし';
+            container.appendChild(none);
+            return;
+          }
+
+          const list = document.createElement('ul');
+          item.checked_symptoms.forEach((symptom) => {
+            const li = document.createElement('li');
+            li.textContent = symptom.symptom_name;
+            list.appendChild(li);
+          });
+          container.appendChild(list);
+
+          const names = item.checked_symptoms.map((symptom) => symptom.symptom_name).join('、');
+          const note = document.createElement('p');
+          note.textContent = `${item.medicine_name}で「${names}」が起きることがあります。気になるときは医師・薬剤師に相談しましょう。`;
+          container.appendChild(note);
+        });
+
+        return container;
+      };
+    </script>
+  </body>
+</html>

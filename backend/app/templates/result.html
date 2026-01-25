@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>まとめシート</title>
+  </head>
+  <body>
+    <h1>まとめシート</h1>
+    <section>
+      <h2>まとめシート生成</h2>
+      <form action="/api/report/generate" method="post">
+        <label for="image_id">画像ID</label>
+        <input id="image_id" name="image_id" type="number" min="1" required />
+        <button type="submit">生成</button>
+      </form>
+    </section>
+    <section>
+      <h2>PDF出力</h2>
+      <form action="/api/report/0/pdf" method="get" onsubmit="this.action = '/api/report/' + this.report_id.value + '/pdf'">
+        <label for="report_id">レポートID</label>
+        <input id="report_id" name="report_id" type="number" min="1" required />
+        <button type="submit">PDFを取得</button>
+      </form>
+    </section>
+  </body>
+</html>

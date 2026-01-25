@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>薬剤照合</title>
+  </head>
+  <body>
+    <h1>薬剤照合</h1>
+    <form action="/api/drugs/check" method="post">
+      <label for="image_id">画像ID</label>
+      <input id="image_id" name="image_id" type="number" min="1" required />
+      <button type="submit">照合開始</button>
+    </form>
+  </body>
+</html>

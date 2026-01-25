@@ -1,18 +1,35 @@
 from typing import Sequence, Type
+from pathlib import Path
 
 from peewee import Model
 
-from backend.app.db.database import close_database, initialize_database
-from backend.app.models import (
-    CheckedSymptom,
-    ExtractedMedicine,
-    MatchedMedicine,
-    Medicine,
-    MedicineSideEffect,
-    SideEffect,
-    SummarySheet,
-    UploadedImage,
-)
+try:
+    from backend.app.db.database import close_database, initialize_database
+    from backend.app.models import (
+        CheckedSymptom,
+        ExtractedMedicine,
+        MatchedMedicine,
+        Medicine,
+        MedicineSideEffect,
+        SideEffect,
+        SummarySheet,
+        UploadedImage,
+    )
+except ModuleNotFoundError:  # Running as a script without package context.
+    import sys
+
+    sys.path.append(str(Path(__file__).resolve().parents[3]))
+    from backend.app.db.database import close_database, initialize_database
+    from backend.app.models import (
+        CheckedSymptom,
+        ExtractedMedicine,
+        MatchedMedicine,
+        Medicine,
+        MedicineSideEffect,
+        SideEffect,
+        SummarySheet,
+        UploadedImage,
+    )
 
 
 def get_models() -> Sequence[Type[Model]]:
