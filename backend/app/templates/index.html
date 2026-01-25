@@ -4,27 +4,86 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Med Safety Check</title>
+    <style>
+      :root {
+        --bg: #eef5f4;
+        --card: #ffffff;
+        --text: #1b2a2f;
+        --muted: #4a6a73;
+        --accent: #2a7f7b;
+        --accent-dark: #1f5e5b;
+        --line: #d7e4e2;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(1200px 600px at 80% -10%, #d6f0ea 0%, transparent 60%),
+          radial-gradient(900px 400px at 10% 10%, #d7ecff 0%, transparent 55%),
+          var(--bg);
+        line-height: 1.8;
+        font-size: 20px;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 56px 20px 80px;
+      }
+      .hero {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        padding: 36px;
+        box-shadow: 0 10px 30px rgba(16, 40, 45, 0.08);
+      }
+      h1 {
+        font-size: 34px;
+        margin: 0 0 16px;
+      }
+      .lead {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      .cta {
+        display: inline-block;
+        padding: 14px 24px;
+        background: var(--accent);
+        color: #fff;
+        text-decoration: none;
+        border-radius: 12px;
+        font-size: 22px;
+        box-shadow: 0 6px 16px rgba(42, 127, 123, 0.24);
+      }
+      .cta:hover { background: var(--accent-dark); }
+      .note {
+        margin-top: 24px;
+        padding-top: 18px;
+        border-top: 1px dashed var(--line);
+        color: var(--muted);
+        font-size: 18px;
+      }
+      @media (max-width: 640px) {
+        h1 { font-size: 28px; }
+        body { font-size: 18px; }
+        .cta { width: 100%; text-align: center; }
+      }
+    </style>
   </head>
   <body>
-    <h1>お薬の効き具合チェック</h1>
-    <p>
-      このアプリは、<br />
-      今飲んでいるお薬が、体に合っているかどうかを<br />
-      確認するための簡単なチェックツールです。<br />
-      <br />
-      いくつかの質問に答えることで、<br />
-      お薬の効き方や体調の変化を整理できます。<br />
-      <br />
-      気になる点があった場合は、<br />
-      この結果を医師や薬剤師に見せてご相談ください。<br />
-      <br />
-      ※このアプリは診断や治療の変更を行うものではありません。
-    </p>
-    <p>
-      <a href="/flow">おくすりのチェックを開始する</a>
-    </p>
-    <p>
-      ※本アプリは診断を行うものではなく、受診や相談の判断材料としてご利用ください。
-    </p>
+    <div class="wrap">
+      <div class="hero">
+        <h1>お薬の効き具合チェック</h1>
+        <p class="lead">
+          このアプリは、今飲んでいるお薬が体に合っているかどうかを<br />
+          確認するための簡単なチェックツールです。<br />
+          いくつかの質問に答えることで、お薬の効き方や体調の変化を整理できます。<br />
+          気になる点があった場合は、この結果を医師や薬剤師に見せてご相談ください。
+        </p>
+        <a class="cta" href="/flow">おくすりのチェックを開始する</a>
+        <p class="note">※このアプリは診断や治療の変更を行うものではありません。</p>
+      </div>
+    </div>
   </body>
 </html>
