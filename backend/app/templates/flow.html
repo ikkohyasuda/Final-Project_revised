@@ -16,9 +16,9 @@
 
     <div class="section">
       <h2>1. 画像アップロード</h2>
-      <form id="upload-form">
-        <input type="file" name="file" accept=".jpg,.jpeg,.png" required />
-        <button type="submit">画像をアップロード</button>
+      <form id="upload-form" novalidate>
+        <input id="upload-file" type="file" name="file" accept=".jpg,.jpeg,.png" />
+        <button type="button" id="upload-button">画像をアップロード</button>
       </form>
       <div id="upload-status" class="status hidden"></div>
     </div>
@@ -30,7 +30,6 @@
 
     <div class="section">
       <h2>3. 結果</h2>
-      <div id="report-status" class="status hidden"></div>
       <div id="report-preview"></div>
       <button id="pdf-button" disabled>PDFを作成する</button>
       <div id="pdf-link"></div>
@@ -38,9 +37,10 @@
 
     <script>
       const uploadForm = document.getElementById('upload-form');
+      const uploadFile = document.getElementById('upload-file');
+      const uploadButton = document.getElementById('upload-button');
       const uploadStatus = document.getElementById('upload-status');
       const symptomForms = document.getElementById('symptom-forms');
-      const reportStatus = document.getElementById('report-status');
       const reportPreview = document.getElementById('report-preview');
       const pdfButton = document.getElementById('pdf-button');
       const pdfLink = document.getElementById('pdf-link');
@@ -54,8 +54,17 @@
         el.classList.remove('hidden');
       };
 
-      uploadForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
+      uploadFile.addEventListener('change', () => {
+        if (uploadFile.files.length > 0) {
+          showStatus(uploadStatus, `選択中: ${uploadFile.files[0].name}`);
+        }
+      });
+
+      uploadButton.addEventListener('click', async () => {
+        if (uploadFile.files.length === 0) {
+          showStatus(uploadStatus, '画像が選択されていません。');
+          return;
+        }
         showStatus(uploadStatus, 'アップロード中...');
         const formData = new FormData(uploadForm);
         const response = await fetch('/api/upload', { method: 'POST', body: formData });
@@ -176,7 +185,6 @@
 
       const generateReport = async () => {
         if (!imageId) return;
-        showStatus(reportStatus, 'まとめシート生成中...');
         reportPreview.innerHTML = '';
         pdfLink.innerHTML = '';
         const formData = new FormData();
@@ -184,11 +192,10 @@
         const response = await fetch('/api/report/generate', { method: 'POST', body: formData });
         const data = await response.json();
         if (!response.ok) {
-          showStatus(reportStatus, data.detail || '生成に失敗しました。');
+          reportPreview.textContent = data.detail || '生成に失敗しました。';
           return;
         }
         reportId = data.report_id;
-        showStatus(reportStatus, `生成完了 (report_id: ${reportId})`);
         reportPreview.appendChild(buildReportPreview(data));
         pdfButton.disabled = false;
       };
@@ -200,10 +207,6 @@
 
       const buildReportPreview = (data) => {
         const container = document.createElement('div');
-        const title = document.createElement('h3');
-        title.textContent = '結果プレビュー';
-        container.appendChild(title);
-
         if (!data.matched || data.matched.length === 0) {
           const empty = document.createElement('p');
           empty.textContent = '該当薬剤がありません。';
@@ -213,25 +216,21 @@
 
         data.matched.forEach((item) => {
           const med = document.createElement('p');
-          med.textContent = `薬剤: ${item.medicine_name}`;
+          med.textContent = `内服薬: ${item.medicine_name}`;
           container.appendChild(med);
 
           if (!item.checked_symptoms || item.checked_symptoms.length === 0) {
             const none = document.createElement('p');
-            none.textContent = '症状チェック: なし';
+            none.textContent = '自覚する症状: なし';
             container.appendChild(none);
             return;
           }
 
-          const list = document.createElement('ul');
-          item.checked_symptoms.forEach((symptom) => {
-            const li = document.createElement('li');
-            li.textContent = symptom.symptom_name;
-            list.appendChild(li);
-          });
-          container.appendChild(list);
-
           const names = item.checked_symptoms.map((symptom) => symptom.symptom_name).join('、');
+          const symptomLine = document.createElement('p');
+          symptomLine.textContent = `自覚する症状: ${names}`;
+          container.appendChild(symptomLine);
+
           const note = document.createElement('p');
           note.textContent = `${item.medicine_name}で「${names}」が起きることがあります。気になるときは医師・薬剤師に相談しましょう。`;
           container.appendChild(note);

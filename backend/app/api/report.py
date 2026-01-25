@@ -127,27 +127,26 @@ def _render_pdf(sheet: SummarySheet, report_data: dict) -> Path:
     c.setFont(japanese_font or 'Helvetica-Bold', 14)
     c.drawString(40, y, '症状まとめシート')
     y -= 30
-    c.setFont(japanese_font or 'Helvetica', 10)
-    c.drawString(40, y, f'画像ID: {report_data["image"].image_id}')
-    y -= 20
-
     for match in report_data['matched']:
         c.setFont(japanese_font or 'Helvetica-Bold', 11)
-        c.drawString(40, y, f'薬剤: {match.medicine.medicine_name} ({match.medicine.generic_name})')
+        c.drawString(40, y, f'内服薬: {match.medicine.medicine_name}')
         y -= 16
         c.setFont(japanese_font or 'Helvetica', 10)
         checked = report_data['checked_map'].get(match.match_id, [])
         if not checked:
-            c.drawString(60, y, '症状チェック: なし')
+            c.drawString(60, y, '自覚する症状: なし')
             y -= 14
         else:
-            for item in checked:
-                c.drawString(60, y, f'- {item.side_effect.symptom_name}')
-                y -= 14
+            names = '、'.join(item.side_effect.symptom_name for item in checked)
+            c.drawString(60, y, f'自覚する症状: {names}')
+            y -= 14
         y -= 6
         if y < 100:
             c.showPage()
             y = 800
+
+    c.setFont(japanese_font or 'Helvetica', 10)
+    c.drawString(40, y, '医師や薬剤師に相談される際に、このシートをご利用ください。')
 
     c.save()
     return output_path
