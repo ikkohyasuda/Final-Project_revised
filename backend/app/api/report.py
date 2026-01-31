@@ -123,30 +123,48 @@ def _render_pdf(sheet: SummarySheet, report_data: dict) -> Path:
 
     japanese_font = _register_japanese_font()
     c = canvas.Canvas(str(output_path))
+    page_width, _page_height = c._pagesize
+    left = 40
+    right = page_width - 40
+    box_padding = 8
+    line_height = 14
     y = 800
     c.setFont(japanese_font or 'Helvetica-Bold', 14)
-    c.drawString(40, y, '症状まとめシート')
+    c.drawString(left, y, '症状まとめシート')
     y -= 30
     for match in report_data['matched']:
-        c.setFont(japanese_font or 'Helvetica-Bold', 11)
-        c.drawString(40, y, f'内服薬: {match.medicine.medicine_name}')
-        y -= 16
-        c.setFont(japanese_font or 'Helvetica', 10)
         checked = report_data['checked_map'].get(match.match_id, [])
-        if not checked:
-            c.drawString(60, y, '自覚する症状: なし')
-            y -= 14
-        else:
+        if checked:
             names = '、'.join(item.side_effect.symptom_name for item in checked)
-            c.drawString(60, y, f'自覚する症状: {names}')
-            y -= 14
-        y -= 6
-        if y < 100:
+            lines = [
+                f'内服薬: {match.medicine.medicine_name}',
+                f'自覚する症状: {names}',
+            ]
+        else:
+            lines = [
+                f'内服薬: {match.medicine.medicine_name}',
+                '自覚する症状: なし',
+            ]
+        box_height = (line_height * len(lines)) + (box_padding * 2)
+        if y - box_height < 100:
             c.showPage()
             y = 800
+        box_bottom = y - box_height
+        c.setLineWidth(1)
+        c.roundRect(left, box_bottom, right - left, box_height, 6)
+        text_y = y - box_padding - 2
+        c.setFont(japanese_font or 'Helvetica-Bold', 11)
+        c.drawString(left + 10, text_y, lines[0])
+        text_y -= line_height
+        c.setFont(japanese_font or 'Helvetica', 10)
+        c.drawString(left + 10, text_y, lines[1])
+        y = box_bottom - 12
 
     c.setFont(japanese_font or 'Helvetica', 10)
-    c.drawString(40, y, '医師や薬剤師に相談される際に、このシートをご利用ください。')
+    if y < 80:
+        c.showPage()
+        y = 800
+    c.drawString(left, y, '医師や薬剤師に相談される際に、このシートをご利用ください。')
 
     c.save()
     return output_path

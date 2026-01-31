@@ -136,6 +136,13 @@
         color: var(--accent-dark);
         font-weight: 600;
       }
+      .report-item {
+        margin-bottom: 16px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: #fbfdfc;
+      }
       .footer-actions {
         margin-top: 24px;
         text-align: right;
@@ -390,25 +397,31 @@
         }
 
         data.matched.forEach((item) => {
+          const block = document.createElement('div');
+          block.className = 'report-item';
+
           const med = document.createElement('p');
           med.textContent = `内服薬: ${item.medicine_name}`;
-          container.appendChild(med);
+          block.appendChild(med);
 
           if (!item.checked_symptoms || item.checked_symptoms.length === 0) {
             const none = document.createElement('p');
             none.textContent = '自覚する症状: なし';
-            container.appendChild(none);
+            block.appendChild(none);
+            container.appendChild(block);
             return;
           }
 
           const names = item.checked_symptoms.map((symptom) => symptom.symptom_name).join('、');
           const symptomLine = document.createElement('p');
           symptomLine.textContent = `自覚する症状: ${names}`;
-          container.appendChild(symptomLine);
+          block.appendChild(symptomLine);
 
           const note = document.createElement('p');
           note.textContent = `${item.medicine_name}で「${names}」が起きることがあります。気になるときは医師・薬剤師に相談しましょう。`;
-          container.appendChild(note);
+          block.appendChild(note);
+
+          container.appendChild(block);
         });
 
         return container;
