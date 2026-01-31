@@ -37,6 +37,16 @@
       .header {
         margin-bottom: 24px;
       }
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 12px;
+        color: var(--accent-dark);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .back-link:hover { text-decoration: underline; }
       .header p {
         color: var(--muted);
         margin: 8px 0 0;
@@ -104,11 +114,31 @@
         margin-bottom: 16px;
         background: #fbfdfc;
       }
+      .form-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .secondary {
+        background: #eef5f4;
+        color: var(--accent-dark);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+      .secondary:hover { background: #e3f0ee; }
       #pdf-link a {
         display: inline-block;
         margin-top: 12px;
         color: var(--accent-dark);
         font-weight: 600;
+      }
+      .footer-actions {
+        margin-top: 24px;
+        text-align: right;
       }
       @media (max-width: 640px) {
         body { font-size: 18px; }
@@ -121,6 +151,7 @@
   <body>
     <div class="wrap">
       <div class="header">
+        <a class="back-link" href="/">&larr; 戻る</a>
         <h1>おくすりのチェック</h1>
         <p>画像をアップロードすると、自動で読み取りと照合が進みます。</p>
       </div>
@@ -153,8 +184,11 @@
           <h2>結果</h2>
         </div>
         <div id="report-preview"></div>
-        <button id="pdf-button" class="primary" disabled>PDFを作成する</button>
+        <button id="pdf-button" class="primary" disabled>プリントする</button>
         <div id="pdf-link"></div>
+        <div class="footer-actions">
+          <a class="secondary" href="/">終了する</a>
+        </div>
       </div>
     </div>
 
@@ -252,7 +286,18 @@
           const form = document.createElement('form');
           form.action = '/api/drugs/symptoms/check';
           form.method = 'post';
-          form.innerHTML = `<h3>薬剤: ${item.medicine_name}</h3>`;
+          const header = document.createElement('div');
+          header.className = 'form-header';
+          header.innerHTML = `<h3>薬剤: ${item.medicine_name}</h3>`;
+          const optOut = document.createElement('button');
+          optOut.type = 'button';
+          optOut.className = 'secondary';
+          optOut.textContent = 'この薬は使用していません';
+          optOut.addEventListener('click', () => {
+            form.remove();
+          });
+          header.appendChild(optOut);
+          form.appendChild(header);
 
           const matchInput = document.createElement('input');
           matchInput.type = 'hidden';
@@ -326,7 +371,7 @@
 
       pdfButton.addEventListener('click', () => {
         if (!reportId) return;
-        pdfLink.innerHTML = `<a href="/api/report/${reportId}/pdf" target="_blank">PDFを開く</a>`;
+        pdfLink.innerHTML = `<a href="/api/report/${reportId}/pdf" target="_blank">プリントした内容を確認する</a>`;
       });
 
       const buildReportPreview = (data) => {

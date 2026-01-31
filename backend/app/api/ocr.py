@@ -26,7 +26,7 @@ def _run_ocr(image_path: Path) -> str:
     """画像からOCRテキストを取得する。"""
 
     try:
-        from PIL import Image
+        from PIL import Image, ImageFilter, ImageOps, ImageEnhance
         import pytesseract
     except ImportError as exc:  # pragma: no cover - import guard
         raise HTTPException(
@@ -42,18 +42,62 @@ def _run_ocr(image_path: Path) -> str:
             detail='画像ファイルを読み込めません。',
         ) from exc
 
-    # 軽い前処理で日本語OCRの精度を底上げする。
-    image = image.convert('L')
-    image = image.resize((image.width * 2, image.height * 2))
-    image = image.point(lambda x: 0 if x < 160 else 255, mode='1')
+    # 複数の前処理パターンでOCRし、結果を統合する。
+    base = image.convert('L')
+    base = ImageOps.autocontrast(base)
+    base = base.filter(ImageFilter.MedianFilter(size=3))
 
-    try:
-        return pytesseract.image_to_string(image, lang=TESSERACT_LANG, config='--psm 6')
-    except pytesseract.TesseractError as exc:
+    # 速度優先: 2倍のみ + 二値化2パターン。
+    base2x = base.resize((base.width * 2, base.height * 2))
+
+    variants: list[Image.Image] = []
+    sharpened = base2x.filter(ImageFilter.UnsharpMask(radius=1.5, percent=150, threshold=3))
+    contrast = ImageEnhance.Contrast(sharpened).enhance(1.4)
+    variants.append(contrast)
+    for threshold in (160, 190):
+        bw = contrast.point(lambda x, t=threshold: 0 if x < t else 255, mode='1').convert('L')
+        variants.append(bw)
+
+    psm_list = [6]
+
+    def run_ocr_with_variants(target_variants: list[Image.Image], target_psm: list[int]) -> list[str]:
+        results: list[str] = []
+        for variant in target_variants:
+            for psm in target_psm:
+                try:
+                    text = pytesseract.image_to_string(
+                        variant,
+                        lang=TESSERACT_LANG,
+                        config=f'--oem 1 --psm {psm} -c preserve_interword_spaces=1 -c user_defined_dpi=300',
+                    )
+                    if text:
+                        results.append(text)
+                except pytesseract.TesseractError:
+                    continue
+        return results
+
+    # 1st pass: 軽量版
+    results = run_ocr_with_variants(variants, psm_list)
+    if results:
+        return '\n'.join(results)
+
+    # 2nd pass: 重めの再試行（3倍 + 追加PSM + 強めの二値化）
+    heavy_variants: list[Image.Image] = []
+    base3x = base.resize((base.width * 3, base.height * 3))
+    sharpened3x = base3x.filter(ImageFilter.UnsharpMask(radius=1.5, percent=150, threshold=3))
+    contrast3x = ImageEnhance.Contrast(sharpened3x).enhance(1.6)
+    heavy_variants.append(contrast3x)
+    for threshold in (140, 200):
+        bw = contrast3x.point(lambda x, t=threshold: 0 if x < t else 255, mode='1').convert('L')
+        heavy_variants.append(bw)
+    heavy_psm = [3, 4, 6]
+    results = run_ocr_with_variants(heavy_variants, heavy_psm)
+    if not results:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='OCR処理に失敗しました。',
-        ) from exc
+        )
+    return '\n'.join(results)
 
 
 @router.post('/api/ocr')
