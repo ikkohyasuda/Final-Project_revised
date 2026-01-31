@@ -59,7 +59,7 @@ def list_symptoms(image_id: int = Form(..., ge=1)) -> dict:
         if not matched:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail='該当薬剤の照合結果がありません。',
+                detail='特に注意が必要なおくすりは検出されませんでしたが、個人差がありますので、気になる症状があれば医師・薬剤師にぜひ相談してください。',
             )
 
         matched_ids = [item.match_id for item in matched]
