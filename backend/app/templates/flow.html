@@ -163,7 +163,7 @@
         </div>
         <p class="hint">お薬手帳の写真を選んでください。</p>
         <form id="upload-form" novalidate>
-          <input id="upload-file" class="file-input" type="file" name="file" accept=".jpg,.jpeg,.png" />
+          <input id="upload-file" class="file-input" type="file" name="file" accept=".jpg,.jpeg,.png,.heic,.heif" />
           <button type="button" id="upload-button" class="primary">画像をアップロード</button>
         </form>
         <div id="upload-status" class="status hidden"></div>
@@ -176,6 +176,7 @@
         </div>
         <p class="hint">気になる症状にチェックを入れて「結果を見る」を押してください。</p>
         <div id="symptom-forms"></div>
+        <button id="symptom-submit" class="primary" type="button" disabled>結果を見る</button>
       </div>
 
       <div class="section card">
@@ -198,6 +199,7 @@
       const uploadButton = document.getElementById('upload-button');
       const uploadStatus = document.getElementById('upload-status');
       const symptomForms = document.getElementById('symptom-forms');
+      const symptomSubmit = document.getElementById('symptom-submit');
       const reportPreview = document.getElementById('report-preview');
       const pdfButton = document.getElementById('pdf-button');
       const pdfLink = document.getElementById('pdf-link');
@@ -272,6 +274,7 @@
 
       const renderSymptoms = async () => {
         symptomForms.innerHTML = '';
+        symptomSubmit.disabled = true;
         const formData = new FormData();
         formData.append('image_id', imageId);
         const response = await fetch('/api/drugs/symptoms', { method: 'POST', body: formData });
@@ -280,6 +283,10 @@
           const error = document.createElement('p');
           error.textContent = data.detail || '症状取得に失敗しました。';
           symptomForms.appendChild(error);
+          return;
+        }
+        if (!data.items || data.items.length === 0) {
+          symptomSubmit.disabled = true;
           return;
         }
         data.items.forEach((item) => {
@@ -322,35 +329,34 @@
           hiddenList.name = 'side_effect_ids';
           form.appendChild(hiddenList);
 
-          const submit = document.createElement('button');
-          submit.type = 'submit';
-          submit.textContent = '結果を見る';
-          submit.className = 'primary';
-          form.appendChild(submit);
-
-          form.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const selected = Array.from(form.querySelectorAll('input[name="symptom"]:checked'))
-              .map((checkbox) => checkbox.value)
-              .join(',');
-            if (!selected) {
-              alert('症状を1つ以上選択してください。');
-              return;
-            }
-            hiddenList.value = selected;
-            const formData = new FormData(form);
-            const response = await fetch('/api/drugs/symptoms/check', { method: 'POST', body: formData });
-            const data = await response.json();
-            if (!response.ok) {
-              alert(data.detail || '保存に失敗しました。');
-              return;
-            }
-            await generateReport();
-          });
-
           symptomForms.appendChild(form);
         });
+        symptomSubmit.disabled = false;
       };
+
+      symptomSubmit.addEventListener('click', async () => {
+        const forms = Array.from(symptomForms.querySelectorAll('form'));
+        if (forms.length === 0) return;
+        for (const form of forms) {
+          const selected = Array.from(form.querySelectorAll('input[name="symptom"]:checked'))
+            .map((checkbox) => checkbox.value)
+            .join(',');
+          if (!selected) {
+            alert('症状を1つ以上選択してください。');
+            return;
+          }
+          const hiddenList = form.querySelector('input[name="side_effect_ids"]');
+          hiddenList.value = selected;
+          const formData = new FormData(form);
+          const response = await fetch('/api/drugs/symptoms/check', { method: 'POST', body: formData });
+          const data = await response.json();
+          if (!response.ok) {
+            alert(data.detail || '保存に失敗しました。');
+            return;
+          }
+        }
+        await generateReport();
+      });
 
       const generateReport = async () => {
         if (!imageId) return;
