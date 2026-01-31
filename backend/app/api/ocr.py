@@ -76,10 +76,22 @@ def _run_ocr(image_path: Path) -> str:
                     continue
         return results
 
+    def katakana_ratio(text: str) -> float:
+        if not text:
+            return 0.0
+        total = len(text)
+        if total == 0:
+            return 0.0
+        katakana = sum(1 for ch in text if 'ァ' <= ch <= 'ン')
+        return katakana / total
+
     # 1st pass: 軽量版
     results = run_ocr_with_variants(variants, psm_list)
     if results:
-        return '\n'.join(results)
+        combined = '\n'.join(results)
+        # カタカナ比率が低い場合は重い再試行を実施
+        if katakana_ratio(combined) >= 0.02:
+            return combined
 
     # 2nd pass: 重めの再試行（3倍 + 追加PSM + 強めの二値化）
     heavy_variants: list[Image.Image] = []
